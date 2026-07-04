@@ -1,0 +1,308 @@
+{
+  "project": "Smart Waste Management System",
+  "version": "0.0.1-SNAPSHOT",
+  "stack": "Spring Boot 3.5.9 + MongoDB + Redis + Thymeleaf",
+
+  "architecture_type": "Monolithic MVC (Model-View-Controller)",
+
+  "layers": {
+    "presentation": {
+      "description": "Server-side rendered HTML pages using Thymeleaf templates + Vanilla CSS + Vanilla JS",
+      "templates": [
+        { "file": "login.html",            "route": "/login",           "access": "PUBLIC",    "description": "Login page with form login and Google OAuth2 button" },
+        { "file": "register.html",         "route": "/register",        "access": "PUBLIC",    "description": "Manual registration with username, password, and role selection" },
+        { "file": "choose-role.html",      "route": "/choose-role",     "access": "PENDING",   "description": "Role selection page shown to new Google OAuth2 users" },
+        { "file": "complaint-form.html",   "route": "/",                "access": "USER",      "description": "Complaint submission form with Leaflet map for location picking" },
+        { "file": "success.html",          "route": "/success",         "access": "USER",      "description": "Complaint submitted successfully confirmation page" },
+        { "file": "admin-dashboard.html",  "route": "/admin/dashboard", "access": "ADMIN",     "description": "Admin view of all complaints with worker assignment controls" },
+        { "file": "admin-worker-map.html", "route": "/admin/worker/{username}", "access": "ADMIN", "description": "Real-time GPS location history map of a specific worker" },
+        { "file": "worker-dashboard.html", "route": "/worker/dashboard","access": "WORKER",    "description": "Worker view of assigned complaints with GPS auto-tracking and proof upload" }
+      ],
+      "frontend_libraries": [
+        { "name": "Leaflet.js",       "version": "1.9.4", "source": "CDN (unpkg.com)", "purpose": "Interactive maps for location picking and worker GPS tracking" },
+        { "name": "OpenStreetMap",    "version": "latest", "source": "tile.openstreetmap.org", "purpose": "Free map tiles — no API key required" },
+        { "name": "Nominatim API",    "version": "latest", "source": "nominatim.openstreetmap.org", "purpose": "Free reverse geocoding (coordinates → address)" },
+        { "name": "Vanilla CSS",      "version": "-",     "source": "/css/style.css",  "purpose": "All custom styling, no frameworks" },
+        { "name": "Vanilla JS",       "version": "-",     "source": "inline in HTML",  "purpose": "GPS tracking, map events, form handling, address lookup" }
+      ]
+    },
+
+    "controller": {
+      "description": "Spring MVC controllers — handle HTTP requests, call services, return views",
+      "classes": [
+        {
+          "name": "LoginController",
+          "file": "controller/LoginController.java",
+          "routes": [
+            { "method": "GET",  "path": "/login",    "description": "Show login page (redirect if already logged in)" },
+            { "method": "GET",  "path": "/register", "description": "Show registration form" },
+            { "method": "POST", "path": "/register", "description": "Register new user with username, password, role" }
+          ]
+        },
+        {
+          "name": "RoleSelectionController",
+          "file": "controller/RoleSelectionController.java",
+          "routes": [
+            { "method": "GET",  "path": "/choose-role", "description": "Show role selection page to new OAuth2 users (PENDING role only)" },
+            { "method": "POST", "path": "/choose-role", "description": "Save chosen role to MongoDB, update SecurityContext, redirect to dashboard" }
+          ]
+        },
+        {
+          "name": "UserController",
+          "file": "controller/UserController.java",
+          "routes": [
+            { "method": "GET",  "path": "/",        "description": "Show complaint submission form with map" },
+            { "method": "POST", "path": "/submit",  "description": "Save complaint to MongoDB, redirect to success page" },
+            { "method": "GET",  "path": "/success", "description": "Show complaint submitted success page" }
+          ]
+        },
+        {
+          "name": "AdminController",
+          "file": "controller/AdminController.java",
+          "routes": [
+            { "method": "GET",  "path": "/admin/dashboard",       "description": "Show all complaints and list of workers" },
+            { "method": "POST", "path": "/admin/assign",          "description": "Assign a worker to a complaint" },
+            { "method": "GET",  "path": "/admin/worker/{username}","description": "Show GPS location history map for a specific worker" }
+          ]
+        },
+        {
+          "name": "WorkerController",
+          "file": "controller/WorkerController.java",
+          "routes": [
+            { "method": "GET",  "path": "/worker/dashboard",    "description": "Show complaints assigned to logged-in worker" },
+            { "method": "POST", "path": "/worker/location",     "description": "Receive GPS coordinates from browser and save to MongoDB" },
+            { "method": "POST", "path": "/worker/clean",        "description": "Mark a complaint as CLEANED" },
+            { "method": "POST", "path": "/worker/upload-proof", "description": "Upload proof image for a completed complaint" }
+          ]
+        }
+      ]
+    },
+
+    "service": {
+      "description": "Business logic layer — sits between controllers and repositories",
+      "classes": [
+        {
+          "name": "UserService",
+          "file": "service/UserService.java",
+          "responsibilities": [
+            "Register new users with hashed passwords",
+            "Get all workers (cached with Redis)",
+            "Get all users"
+          ],
+          "caching": "Cacheable on getAllWorkers(), CacheEvict on registerUser()"
+        },
+        {
+          "name": "ComplaintService",
+          "file": "service/ComplaintService.java",
+          "responsibilities": [
+            "Save new complaint to MongoDB",
+            "Get all complaints",
+            "Get complaints by assigned worker",
+            "Assign a worker to a complaint",
+            "Mark complaint as CLEANED"
+          ]
+        },
+        {
+          "name": "WorkerLocationService",
+          "file": "service/WorkerLocationService.java",
+          "responsibilities": [
+            "Save GPS coordinates for a worker",
+            "Get last N locations for a worker"
+          ]
+        },
+        {
+          "name": "CustomUserDetailsService",
+          "file": "service/CustomUserDetailsService.java",
+          "responsibilities": [
+            "Load user by username from MongoDB for form login",
+            "Build Spring Security UserDetails with role"
+          ],
+          "caching": "Cacheable on loadUserByUsername()"
+        },
+        {
+          "name": "CustomOAuth2UserService",
+          "file": "service/CustomOAuth2UserService.java",
+          "responsibilities": [
+            "Called after Google verifies the user's identity",
+            "Check if email exists in MongoDB",
+            "Auto-create new user with PENDING role if first login",
+            "Return OAuth2User with authorities based on role in MongoDB"
+          ]
+        }
+      ]
+    },
+
+    "model": {
+      "description": "MongoDB document models (Java POJOs mapped to MongoDB collections)",
+      "classes": [
+        {
+          "name": "AppUser",
+          "file": "model/AppUser.java",
+          "collection": "users",
+          "fields": ["id", "username", "password", "role"],
+          "roles": ["USER", "WORKER", "ADMIN", "PENDING"],
+          "note": "Implements Serializable for Redis session storage"
+        },
+        {
+          "name": "Complaint",
+          "file": "model/Complaint.java",
+          "collection": "complaints",
+          "fields": ["id", "userName", "location", "issue", "status", "assignedWorker"],
+          "statuses": ["PENDING", "ASSIGNED", "CLEANED"]
+        },
+        {
+          "name": "WorkerLocation",
+          "file": "model/WorkerLocation.java",
+          "collection": "worker_locations",
+          "fields": ["id", "workerName", "latitude", "longitude", "timestamp"]
+        }
+      ]
+    },
+
+    "repository": {
+      "description": "Spring Data MongoDB repositories — auto-implemented CRUD interfaces",
+      "classes": [
+        { "name": "UserRepository",           "file": "repository/UserRepository.java",           "extends": "MongoRepository<AppUser, String>",         "custom_methods": ["findByUsername(String username)"] },
+        { "name": "ComplaintRepository",      "file": "repository/ComplaintRepository.java",      "extends": "MongoRepository<Complaint, String>",       "custom_methods": ["findByAssignedWorker(String worker)"] },
+        { "name": "WorkerLocationRepository", "file": "repository/WorkerLocationRepository.java", "extends": "MongoRepository<WorkerLocation, String>",  "custom_methods": ["findTop10ByWorkerNameOrderByTimestampDesc(String name)"] }
+      ]
+    },
+
+    "config": {
+      "description": "Spring configuration classes",
+      "classes": [
+        {
+          "name": "SecurityConfig",
+          "file": "config/SecurityConfig.java",
+          "description": "Defines all URL access rules, form login, OAuth2 login, logout, and CSRF config",
+          "url_rules": {
+            "/admin/**":    "ROLE_ADMIN only",
+            "/worker/**":   "ROLE_WORKER only",
+            "/choose-role": "Any authenticated user (PENDING role)",
+            "/, /submit, /success, /status": "Any authenticated user",
+            "/login, /register, /css/**, /oauth2/**, /login/oauth2/**": "Public (no login needed)"
+          }
+        },
+        {
+          "name": "CustomSuccessHandler",
+          "file": "config/CustomSuccessHandler.java",
+          "description": "After login, redirects user to the correct page based on role",
+          "redirects": {
+            "ROLE_PENDING": "/choose-role",
+            "ROLE_ADMIN":   "/admin/dashboard",
+            "ROLE_WORKER":  "/worker/dashboard",
+            "ROLE_USER":    "/"
+          }
+        },
+        {
+          "name": "RedisConfig",
+          "file": "config/RedisConfig.java",
+          "description": "Configures Redis as HTTP session store and cache store",
+          "annotations": ["@EnableCaching", "@EnableRedisHttpSession"]
+        }
+      ]
+    }
+  },
+
+  "databases": {
+    "mongodb": {
+      "purpose": "Primary data store",
+      "host": "localhost",
+      "port": 27017,
+      "database": "wastemanagementdb",
+      "collections": ["users", "complaints", "worker_locations"]
+    },
+    "redis": {
+      "purpose": "Session store + Cache",
+      "host": "localhost",
+      "port": 6379,
+      "uses": [
+        "HTTP session storage (@EnableRedisHttpSession) — keeps users logged in",
+        "Method-level caching (@Cacheable) — caches users and workers lists"
+      ],
+      "session_timeout": "1800 seconds (30 minutes)",
+      "cache_ttl": "600000 ms (10 minutes)"
+    }
+  },
+
+  "external_services": {
+    "google_oauth2": {
+      "purpose": "Third-party authentication — lets users sign in with their Google account",
+      "endpoints": {
+        "auth":      "https://accounts.google.com/o/oauth2/auth",
+        "token":     "https://oauth2.googleapis.com/token",
+        "user_info": "https://www.googleapis.com/oauth2/v2/userinfo"
+      },
+      "callback_url": "http://localhost:8080/login/oauth2/code/google",
+      "scopes": ["profile", "email"]
+    },
+    "openstreetmap": {
+      "purpose": "Free map tiles — no API key required",
+      "tile_url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    },
+    "nominatim": {
+      "purpose": "Free reverse geocoding — converts GPS coordinates to readable addresses",
+      "reverse_url": "https://nominatim.openstreetmap.org/reverse",
+      "search_url":  "https://nominatim.openstreetmap.org/search"
+    }
+  },
+
+  "authentication_flow": {
+    "form_login": {
+      "steps": [
+        "User submits username + password on /login",
+        "CustomUserDetailsService loads user from MongoDB (or Redis cache)",
+        "BCrypt verifies password hash",
+        "CustomSuccessHandler redirects based on role"
+      ]
+    },
+    "google_oauth2": {
+      "steps": [
+        "User clicks 'Continue with Google' on /login",
+        "Browser redirected to Google's login page",
+        "Google verifies credentials and returns email + name to app",
+        "CustomOAuth2UserService checks if email exists in MongoDB",
+        "New user → saved with PENDING role → redirected to /choose-role",
+        "Existing user → role loaded from MongoDB → redirected to dashboard",
+        "Session saved in Redis with authenticated user info"
+      ]
+    }
+  },
+
+  "gps_tracking_flow": {
+    "steps": [
+      "Worker logs in and lands on /worker/dashboard",
+      "Browser's navigator.geolocation.watchPosition() starts tracking GPS",
+      "Every 30 seconds, coordinates are POSTed to /worker/location",
+      "WorkerController saves lat/lng + timestamp to MongoDB (worker_locations)",
+      "Admin visits /admin/worker/{username}",
+      "AdminController loads last 10 locations from MongoDB",
+      "Leaflet map renders location history with markers and polyline path"
+    ]
+  },
+
+  "complaint_lifecycle": {
+    "statuses": ["PENDING", "ASSIGNED", "CLEANED"],
+    "flow": [
+      "Citizen submits complaint (location + issue) → status: PENDING",
+      "Admin assigns a worker → status: ASSIGNED",
+      "Worker marks it cleaned → status: CLEANED"
+    ]
+  },
+
+  "security": {
+    "password_hashing": "BCrypt (via BCryptPasswordEncoder)",
+    "session_management": "Redis-backed HTTP sessions (spring-session-data-redis)",
+    "csrf": "Disabled (spring-boot app with form login — can be re-enabled for production)",
+    "role_enforcement": "Spring Security method-level via .hasRole() in SecurityConfig"
+  },
+
+  "dto_layer": {
+    "description": "Data Transfer Objects used to decouple controller/view from MongoDB models",
+    "classes": [
+      { "name": "ComplaintDTO",      "file": "dto/ComplaintDTO.java",      "used_in": "UserController, AdminController, WorkerController" },
+      { "name": "AppUserDTO",        "file": "dto/AppUserDTO.java",        "used_in": "Registration and user listing" },
+      { "name": "WorkerLocationDTO", "file": "dto/WorkerLocationDTO.java", "used_in": "AdminController worker map view" }
+    ]
+  }
+}

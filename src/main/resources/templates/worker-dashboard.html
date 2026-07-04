@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Dashboard - Waste Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    👷 Worker Dashboard - <span th:text="${workerName}"></span>
+    <a href="/logout">Logout</a>
+</div>
+
+<div class="container">
+    <h2>📝 Assigned Complaints</h2>
+
+    <div th:if="${complaints == null or complaints.isEmpty()}" style="text-align: center; padding: 40px; color: #999;">
+        <p style="font-size: 18px;">No assigned complaints.</p>
+    </div>
+
+    <table th:if="${complaints != null and !complaints.isEmpty()}">
+        <thead>
+            <tr>
+                <th>Location</th>
+                <th>Issue</th>
+                <th>Status</th>
+                <th>Upload Proof</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="c : ${complaints}">
+                <td th:text="${c.location}"></td>
+                <td th:text="${c.issue}"></td>
+                <td>
+                    <span class="badge"
+                          th:text="${c.status}"
+                          th:classappend="' ' + ${c.status}">
+                    </span>
+                </td>
+                <td>
+                    <form th:action="@{/worker/upload-proof}"
+                          method="post"
+                          enctype="multipart/form-data"
+                          style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <input type="hidden" name="complaintId" th:value="${c.id}">
+                        <input type="file" name="image" accept="image/*" required style="flex: 1; min-width: 150px;">
+                        <button type="submit" style="white-space: nowrap;">📤 Upload</button>
+                    </form>
+                </td>
+                <td>
+                    <form th:action="@{/worker/clean}" method="post" style="margin: 0;">
+                        <input type="hidden" name="complaintId" th:value="${c.id}">
+                        <button type="submit"
+                                th:disabled="${c.status == 'CLEANED'}"
+                                style="white-space: nowrap;">
+                            <span th:if="${c.status != 'CLEANED'}">✅ Mark Cleaned</span>
+                            <span th:if="${c.status == 'CLEANED'}">✓ Completed</span>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+        <p style="margin: 0; color: #1976d2; font-weight: 500;">
+            📍 GPS Tracking: Your location is being automatically tracked
+        </p>
+    </div>
+</div>
+
+<!-- 🔹 AUTO GPS TRACKING -->
+<script>
+    (function() {
+        let lastUpdateTime = 0;
+        const UPDATE_INTERVAL = 30000; // Update every 30 seconds to avoid spamming server
+        let updateCount = 0;
+        let errorCount = 0;
+        
+        function updateStatusDiv(message, isError = false) {
+            const statusDiv = document.querySelector('.container > div:last-child');
+            if (statusDiv) {
+                statusDiv.style.background = isError ? '#ffebee' : '#e3f2fd';
+                statusDiv.style.borderLeftColor = isError ? '#f44336' : '#2196f3';
+                statusDiv.querySelector('p').innerHTML = message;
+            }
+        }
+        
+        function sendLocation(lat, lng) {
+            const now = Date.now();
+            if (now - lastUpdateTime < UPDATE_INTERVAL) {
+                return; // Throttle updates
+            }
+            lastUpdateTime = now;
+            
+            // Use URLSearchParams for proper encoding
+            const params = new URLSearchParams();
+            params.append('lat', lat.toString());
+            params.append('lng', lng.toString());
+            
+            fetch('/worker/location?' + params.toString(), {
+                method: 'POST',
+                credentials: 'include', // CRITICAL: Include cookies for authentication
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    updateCount++;
+                    updateStatusDiv(`📍 GPS Tracking: Active (${updateCount} updates sent)`);
+                    errorCount = 0; // Reset error count on success
+                } else if (response.status === 403 || response.status === 401) {
+                    throw new Error('Authentication failed');
+                } else {
+                    throw new Error('Server error: ' + response.status);
+                }
+            })
+            .catch(err => {
+                errorCount++;
+                console.error('Location update failed:', err);
+                if (errorCount === 1) {
+                    updateStatusDiv('⚠️ GPS Tracking: Failed to send location. Check authentication.', true);
+                } else if (errorCount > 3) {
+                    updateStatusDiv('❌ GPS Tracking: Multiple failures. Please refresh the page.', true);
+                }
+            });
+        }
+        
+        if (navigator.geolocation) {
+            const watchId = navigator.geolocation.watchPosition(
+                pos => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    sendLocation(lat, lng);
+                },
+                err => {
+                    console.warn("GPS error:", err);
+                    let errorMsg = '⚠️ GPS Tracking: ';
+                    switch(err.code) {
+                        case err.PERMISSION_DENIED:
+                            errorMsg += 'Location permission denied. Please enable location access.';
+                            break;
+                        case err.POSITION_UNAVAILABLE:
+                            errorMsg += 'Location unavailable. Check your device settings.';
+                            break;
+                        case err.TIMEOUT:
+                            errorMsg += 'Location request timed out.';
+                            break;
+                        default:
+                            errorMsg += 'An unknown error occurred.';
+                    }
+                    updateStatusDiv(errorMsg, true);
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    timeout: 10000, 
+                    maximumAge: 5000 
+                }
+            );
+            
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', () => {
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                }
+            });
+        } else {
+            updateStatusDiv('❌ GPS Tracking: Geolocation is not supported by your browser.', true);
+        }
+    })();
+</script>
+
+</body>
+</html>

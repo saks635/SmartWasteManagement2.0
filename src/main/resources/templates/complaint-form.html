@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raise Complaint - Waste Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Leaflet - Fallback (100% FREE, No API Key Required) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Google Maps - Primary (if API key available), Fallback to Leaflet if fails -->
+    <script th:if="${useGoogleMaps}">
+        // Try Google Maps first if API key is available
+        window.initGoogleMap = function() {
+            initGoogleMaps();
+        };
+        // Error handler for Google Maps - falls back to Leaflet
+        window.gm_authFailure = function() {
+            console.warn('Google Maps failed, falling back to Leaflet/OpenStreetMap');
+            initLeafletMap();
+        };
+        // Load Google Maps API
+        (function() {
+            let script = document.createElement('script');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=/*[[${googleMapsApiKey}]]*/&libraries=places,geometry&callback=initGoogleMap';
+            script.async = true;
+            script.defer = true;
+            script.onerror = function() {
+                console.warn('Google Maps script failed to load, using Leaflet fallback');
+                initLeafletMap();
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+    <style>
+        #locationMap {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 2px solid #e0e0e0;
+        }
+        .map-instructions {
+            background: #f0f7ff;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+
+<div class="navbar">🏠 User Dashboard</div>
+
+<div class="container" style="max-width: 700px;">
+    <h2>📢 Raise Waste Complaint</h2>
+
+    <form th:action="@{/submit}" th:object="${complaint}" method="post" id="complaintForm">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #2c3e50;">Your Name</label>
+        <input type="text" th:field="*{userName}" placeholder="Enter your full name" required>
+
+        <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #2c3e50;">Location</label>
+        <div class="map-instructions">
+            💡 Click on the map below to select the exact location, or enter address manually
+        </div>
+        <div id="locationMap"></div>
+        <input type="text" id="locationInput" th:field="*{location}" placeholder="Location address (or click map to select)" required>
+        <input type="hidden" id="latitude" name="latitude">
+        <input type="hidden" id="longitude" name="longitude">
+
+        <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #2c3e50;">Issue Description</label>
+        <textarea th:field="*{issue}" placeholder="Describe the waste management issue in detail..." required></textarea>
+
+        <button type="submit" style="width: 100%; margin-top: 10px; font-size: 18px;">
+            📤 Submit Complaint
+        </button>
+    </form>
+
+    <div style="margin-top: 30px; padding: 15px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #2196f3;">
+        <p style="margin: 0; color: #1976d2; font-size: 14px;">
+            💡 <strong>Tip:</strong> Use the map to pinpoint the exact location for faster response from our workers.
+        </p>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    let map, marker, geocoder;
+    let selectedLat = null, selectedLng = null;
+    let mapInitialized = false;
+    let useGoogleMaps = /*[[${useGoogleMaps}]]*/ false;
+    let mapType = null; // 'google' or 'leaflet'
+
+    // Google Maps initialization
+    function initGoogleMaps() {
+        if (mapInitialized || typeof google === 'undefined' || typeof google.maps === 'undefined') {
+            console.log('Google Maps not available, using Leaflet fallback');
+            setTimeout(initLeafletMap, 100);
+            return;
+        }
+
+        try {
+            // Initialize Google Maps
+            map = new google.maps.Map(document.getElementById('locationMap'), {
+                center: { lat: 20.5937, lng: 78.9629 },
+                zoom: 6
+            });
+
+            geocoder = new google.maps.Geocoder();
+            mapType = 'google';
+            mapInitialized = true;
+            setupGoogleMapsEvents();
+            console.log('✅ Using Google Maps');
+        } catch (error) {
+            console.warn('Google Maps initialization failed, using Leaflet fallback:', error);
+            initLeafletMap();
+        }
+    }
+
+    // Leaflet/OpenStreetMap fallback (FREE, no API key)
+    function initLeafletMap() {
+        if (mapInitialized && mapType === 'leaflet') return;
+
+        try {
+            // Clear any existing map
+            const mapDiv = document.getElementById('locationMap');
+            if (mapDiv && map && mapType === 'google') {
+                mapDiv.innerHTML = '';
+            }
+
+            // Initialize Leaflet map
+            map = L.map('locationMap').setView([20.5937, 78.9629], 6);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            mapType = 'leaflet';
+            mapInitialized = true;
+            setupLeafletEvents();
+            console.log('✅ Using Leaflet/OpenStreetMap (Free)');
+        } catch (error) {
+            console.error('Failed to initialize map:', error);
+        }
+    }
+
+    function setupGoogleMapsEvents() {
+        // Try to get user's current location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    map.setCenter({ lat: lat, lng: lng });
+                    map.setZoom(15);
+                    
+                    marker = new google.maps.Marker({
+                        position: { lat: lat, lng: lng },
+                        map: map,
+                        draggable: true
+                    });
+                    
+                    selectedLat = lat;
+                    selectedLng = lng;
+                    updateLocationInputGoogle(lat, lng);
+                    
+                    marker.addListener('dragend', function(e) {
+                        selectedLat = e.latLng.lat();
+                        selectedLng = e.latLng.lng();
+                        updateLocationInputGoogle(selectedLat, selectedLng);
+                    });
+                },
+                function(error) {
+                    console.log('Geolocation error:', error);
+                    addMarkerAtCenterGoogle();
+                }
+            );
+        } else {
+            addMarkerAtCenterGoogle();
+        }
+
+        // Click event
+        map.addListener('click', function(e) {
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            
+            if (marker) {
+                marker.setPosition({ lat: lat, lng: lng });
+            } else {
+                marker = new google.maps.Marker({
+                    position: { lat: lat, lng: lng },
+                    map: map,
+                    draggable: true
+                });
+                marker.addListener('dragend', function(e) {
+                    selectedLat = e.latLng.lat();
+                    selectedLng = e.latLng.lng();
+                    updateLocationInputGoogle(selectedLat, selectedLng);
+                });
+            }
+            
+            selectedLat = lat;
+            selectedLng = lng;
+            updateLocationInputGoogle(lat, lng);
+        });
+
+        // Places Autocomplete
+        const autocomplete = new google.maps.places.Autocomplete(
+            document.getElementById('locationInput'),
+            { types: ['geocode'] }
+        );
+        autocomplete.bindTo('bounds', map);
+        autocomplete.addListener('place_changed', function() {
+            const place = autocomplete.getPlace();
+            if (!place.geometry) return;
+
+            if (place.geometry.viewport) {
+                map.fitBounds(place.geometry.viewport);
+            } else {
+                map.setCenter(place.geometry.location);
+                map.setZoom(15);
+            }
+
+            if (marker) {
+                marker.setPosition(place.geometry.location);
+            } else {
+                marker = new google.maps.Marker({
+                    position: place.geometry.location,
+                    map: map,
+                    draggable: true
+                });
+            }
+
+            selectedLat = place.geometry.location.lat();
+            selectedLng = place.geometry.location.lng();
+            document.getElementById('latitude').value = selectedLat;
+            document.getElementById('longitude').value = selectedLng;
+        });
+    }
+
+    function setupLeafletEvents() {
+        // Try to get user's current location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    map.setView([lat, lng], 15);
+                    
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                    selectedLat = lat;
+                    selectedLng = lng;
+                    updateLocationInputLeaflet(lat, lng);
+                    
+                    marker.on('dragend', function(e) {
+                        const pos = marker.getLatLng();
+                        selectedLat = pos.lat;
+                        selectedLng = pos.lng;
+                        updateLocationInputLeaflet(selectedLat, selectedLng);
+                    });
+                },
+                function(error) {
+                    console.log('Geolocation error:', error);
+                    addMarkerAtCenterLeaflet();
+                }
+            );
+        } else {
+            addMarkerAtCenterLeaflet();
+        }
+
+        // Click event
+        map.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                marker.on('dragend', function(e) {
+                    const pos = marker.getLatLng();
+                    selectedLat = pos.lat;
+                    selectedLng = pos.lng;
+                    updateLocationInputLeaflet(pos.lat, pos.lng);
+                });
+            }
+            
+            selectedLat = lat;
+            selectedLng = lng;
+            updateLocationInputLeaflet(lat, lng);
+        });
+    }
+
+    function addMarkerAtCenterGoogle() {
+        const center = map.getCenter();
+        marker = new google.maps.Marker({
+            position: center,
+            map: map,
+            draggable: true
+        });
+        selectedLat = center.lat();
+        selectedLng = center.lng();
+        updateLocationInputGoogle(selectedLat, selectedLng);
+        marker.addListener('dragend', function(e) {
+            selectedLat = e.latLng.lat();
+            selectedLng = e.latLng.lng();
+            updateLocationInputGoogle(selectedLat, selectedLng);
+        });
+    }
+
+    function addMarkerAtCenterLeaflet() {
+        const center = map.getCenter();
+        marker = L.marker([center.lat, center.lng], { draggable: true }).addTo(map);
+        selectedLat = center.lat;
+        selectedLng = center.lng;
+        updateLocationInputLeaflet(center.lat, center.lng);
+        marker.on('dragend', function(e) {
+            const pos = marker.getLatLng();
+            selectedLat = pos.lat;
+            selectedLng = pos.lng;
+            updateLocationInputLeaflet(pos.lat, pos.lng);
+        });
+    }
+
+    function updateLocationInputGoogle(lat, lng) {
+        document.getElementById('latitude').value = lat;
+        document.getElementById('longitude').value = lng;
+        if (geocoder) {
+            geocoder.geocode({ location: { lat: lat, lng: lng } }, function(results, status) {
+                if (status === 'OK' && results[0]) {
+                    document.getElementById('locationInput').value = results[0].formatted_address;
+                } else {
+                    updateLocationInputLeaflet(lat, lng); // Fallback to Nominatim
+                }
+            });
+        } else {
+            updateLocationInputLeaflet(lat, lng);
+        }
+    }
+
+    function updateLocationInputLeaflet(lat, lng) {
+        document.getElementById('latitude').value = lat;
+        document.getElementById('longitude').value = lng;
+        
+        // Use OpenStreetMap Nominatim (FREE, no API key)
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    document.getElementById('locationInput').value = data.display_name;
+                } else {
+                    document.getElementById('locationInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('locationInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            });
+    }
+
+    // Handle manual address entry
+    document.addEventListener('DOMContentLoaded', function() {
+        // If Google Maps not configured, use Leaflet
+        if (!useGoogleMaps) {
+            setTimeout(initLeafletMap, 100);
+        }
+
+        const locationInput = document.getElementById('locationInput');
+        if (locationInput) {
+            locationInput.addEventListener('blur', function() {
+                const address = this.value;
+                if (address && address.length > 5 && mapInitialized) {
+                    if (mapType === 'google' && geocoder) {
+                        geocoder.geocode({ address: address }, function(results, status) {
+                            if (status === 'OK' && results[0]) {
+                                const lat = results[0].geometry.location.lat();
+                                const lng = results[0].geometry.location.lng();
+                                map.setCenter({ lat: lat, lng: lng });
+                                map.setZoom(15);
+                                if (marker) {
+                                    marker.setPosition({ lat: lat, lng: lng });
+                                } else {
+                                    marker = new google.maps.Marker({
+                                        position: { lat: lat, lng: lng },
+                                        map: map,
+                                        draggable: true
+                                    });
+                                }
+                                selectedLat = lat;
+                                selectedLng = lng;
+                                document.getElementById('latitude').value = lat;
+                                document.getElementById('longitude').value = lng;
+                            }
+                        });
+                    } else {
+                        // Use Nominatim for Leaflet
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data && data.length > 0 && mapType === 'leaflet') {
+                                    const lat = parseFloat(data[0].lat);
+                                    const lng = parseFloat(data[0].lon);
+                                    map.setView([lat, lng], 15);
+                                    if (marker) {
+                                        marker.setLatLng([lat, lng]);
+                                    } else {
+                                        marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                                    }
+                                    selectedLat = lat;
+                                    selectedLng = lng;
+                                    document.getElementById('latitude').value = lat;
+                                    document.getElementById('longitude').value = lng;
+                                }
+                            })
+                            .catch(err => console.log('Geocoding error:', err));
+                    }
+                }
+            });
+        }
+
+        // Fallback timeout - if Google Maps doesn't load in 5 seconds, use Leaflet
+        setTimeout(function() {
+            if (!mapInitialized) {
+                console.log('Map not initialized, using Leaflet fallback');
+                initLeafletMap();
+            }
+        }, 5000);
+    });
+    /*]]>*/
+</script>
+
+</body>
+</html>

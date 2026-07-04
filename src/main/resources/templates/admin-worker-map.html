@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Tracking - Waste Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Leaflet - Fallback (100% FREE, No API Key Required) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Google Maps - Primary (if API key available), Fallback to Leaflet if fails -->
+    <script th:if="${useGoogleMaps}">
+        window.initGoogleMapAdmin = function() {
+            initGoogleMapsAdmin();
+        };
+        window.gm_authFailure = function() {
+            console.warn('Google Maps failed, falling back to Leaflet/OpenStreetMap');
+            initLeafletMapAdmin();
+        };
+        (function() {
+            let script = document.createElement('script');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=/*[[${googleMapsApiKey}]]*/&libraries=geometry&callback=initGoogleMapAdmin';
+            script.async = true;
+            script.defer = true;
+            script.onerror = function() {
+                console.warn('Google Maps script failed to load, using Leaflet fallback');
+                initLeafletMapAdmin();
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+</head>
+<body>
+
+<div class="navbar">
+    🗺️ Worker Tracking - <span th:text="${workerName}"></span>
+    <a href="/admin/dashboard">← Back to Dashboard</a>
+</div>
+
+<div class="container">
+    <h2>📍 Location History</h2>
+
+    <div id="map" style="height: 500px; width: 100%; border-radius: 10px; margin: 20px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1);"></div>
+
+    <div th:if="${locations == null or locations.isEmpty()}" style="text-align: center; padding: 40px; color: #999;">
+        <p style="font-size: 18px;">No location data available for this worker.</p>
+        <p style="font-size: 14px; margin-top: 10px;">The worker's GPS tracking will appear here once they start their shift.</p>
+    </div>
+
+    <div th:if="${locations != null and !locations.isEmpty()}" style="margin-top: 20px;">
+        <h3 style="margin-bottom: 15px;">Recent Locations</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Time</th>
+                    <th>Address</th>
+                    <th>Coordinates</th>
+                </tr>
+            </thead>
+            <tbody id="locationsTableBody">
+                <tr th:each="loc, iterStat : ${locations}">
+                    <td th:text="${iterStat.count}"></td>
+                    <td th:text="${loc.timestamp}"></td>
+                    <td class="address-cell" data-lat th:attr="data-lat=${loc.latitude}, data-lng=${loc.longitude}">
+                        <span class="loading-address">Loading address...</span>
+                    </td>
+                    <td style="font-size: 12px; color: #666;">
+                        <span th:text="${#numbers.formatDecimal(loc.latitude, 1, 6)}"></span>, 
+                        <span th:text="${#numbers.formatDecimal(loc.longitude, 1, 6)}"></span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    let addressCache = {};
+    let mapInitialized = false;
+    let useGoogleMaps = /*[[${useGoogleMaps}]]*/ false;
+    let mapType = null;
+    
+    // Google Maps initialization for admin
+    function initGoogleMapsAdmin() {
+        let locations = /*[[${locations}]]*/ [];
+        let workerName = /*[[${workerName}]]*/ 'Worker';
+        
+        if (mapInitialized || typeof google === 'undefined' || typeof google.maps === 'undefined' || locations.length === 0) {
+            initLeafletMapAdmin();
+            return;
+        }
+
+        try {
+            let map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: locations[0].latitude, lng: locations[0].longitude },
+                zoom: 14,
+                mapTypeId: 'roadmap'
+            });
+
+            let path = locations.map(loc => ({ lat: loc.latitude, lng: loc.longitude }));
+            let routePath = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#667eea',
+                strokeOpacity: 0.8,
+                strokeWeight: 4
+            });
+            routePath.setMap(map);
+
+            let bounds = new google.maps.LatLngBounds();
+            let geocoder = new google.maps.Geocoder();
+            
+            locations.forEach((loc, index) => {
+                let position = { lat: loc.latitude, lng: loc.longitude };
+                bounds.extend(position);
+
+                let markerIcon = {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 10,
+                    fillColor: index === 0 ? '#43e97b' : '#667eea',
+                    fillOpacity: 1,
+                    strokeColor: 'white',
+                    strokeWeight: 3
+                };
+
+                let marker = new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    icon: markerIcon,
+                    label: { text: (index + 1).toString(), color: 'white', fontWeight: 'bold', fontSize: '12px' }
+                });
+
+                getAddressGoogle(geocoder, loc.latitude, loc.longitude, index, function(address) {
+                    let infoWindow = new google.maps.InfoWindow({
+                        content: '<div style="padding: 10px; max-width: 300px;">' +
+                                '<strong>' + workerName + '</strong><br>Location ' + (index + 1) + '<br><br>' +
+                                '<strong>📍 Address:</strong><br>' + address + '<br><br>' +
+                                '<strong>🕐 Time:</strong> ' + loc.timestamp + '<br>' +
+                                '<strong>📌 Coordinates:</strong><br>Lat: ' + loc.latitude.toFixed(6) + '<br>Lng: ' + loc.longitude.toFixed(6) +
+                                '</div>'
+                    });
+                    marker.addListener('click', function() { infoWindow.open(map, marker); });
+                });
+            });
+
+            map.fitBounds(bounds);
+            loadAddressesForTable(locations);
+            mapType = 'google';
+            mapInitialized = true;
+            console.log('✅ Using Google Maps');
+        } catch (error) {
+            console.warn('Google Maps failed, using Leaflet fallback:', error);
+            initLeafletMapAdmin();
+        }
+    }
+
+    // Leaflet fallback for admin
+    function initLeafletMapAdmin() {
+        if (mapInitialized && mapType === 'leaflet') return;
+        
+        let locations = /*[[${locations}]]*/ [];
+        let workerName = /*[[${workerName}]]*/ 'Worker';
+
+        if (locations.length > 0) {
+            let map = L.map('map').setView([locations[0].latitude, locations[0].longitude], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            let latlngs = locations.map(loc => [loc.latitude, loc.longitude]);
+            let polyline = L.polyline(latlngs, {
+                color: '#667eea',
+                weight: 4,
+                opacity: 0.8
+            }).addTo(map);
+
+            let bounds = L.latLngBounds(latlngs);
+            
+            locations.forEach((loc, index) => {
+                let isFirst = index === 0;
+                let position = [loc.latitude, loc.longitude];
+
+                let markerIcon = L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background-color: ' + (isFirst ? '#43e97b' : '#667eea') + 
+                          '; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; ' +
+                          'box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; ' +
+                          'justify-content: center; color: white; font-weight: bold; font-size: 12px;">' +
+                          (index + 1) + '</div>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                let marker = L.marker(position, { icon: markerIcon }).addTo(map);
+
+                getAddress(loc.latitude, loc.longitude, index, function(address) {
+                    let popupContent = '<div style="padding: 10px; max-width: 300px;">' +
+                            '<strong>' + workerName + '</strong><br>Location ' + (index + 1) + '<br><br>' +
+                            '<strong>📍 Address:</strong><br>' + address + '<br><br>' +
+                            '<strong>🕐 Time:</strong> ' + loc.timestamp + '<br>' +
+                            '<strong>📌 Coordinates:</strong><br>Lat: ' + loc.latitude.toFixed(6) + '<br>Lng: ' + loc.longitude.toFixed(6) +
+                            '</div>';
+                    marker.bindPopup(popupContent);
+                });
+            });
+
+            map.fitBounds(bounds, { padding: [20, 20] });
+            loadAddressesForTable(locations);
+            mapType = 'leaflet';
+            mapInitialized = true;
+            console.log('✅ Using Leaflet/OpenStreetMap (Free)');
+        } else {
+            let map = L.map('map').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            L.popup()
+                .setLatLng([0, 0])
+                .setContent('<div style="text-align: center; padding: 20px;">' +
+                           '<p style="font-size: 18px; color: #999;">📍 No location data available</p>' +
+                           '<p style="font-size: 14px;">The worker\'s GPS tracking will appear here once they start their shift.</p>' +
+                           '</div>')
+                .openOn(map);
+        }
+    }
+    
+    function getAddressGoogle(geocoder, lat, lng, index, callback) {
+        let cacheKey = lat.toFixed(6) + ',' + lng.toFixed(6);
+        if (addressCache[cacheKey]) {
+            callback(addressCache[cacheKey]);
+            return;
+        }
+        geocoder.geocode({ location: { lat: lat, lng: lng } }, function(results, status) {
+            if (status === 'OK' && results[0]) {
+                let address = results[0].formatted_address;
+                addressCache[cacheKey] = address;
+                callback(address);
+            } else {
+                getAddress(lat, lng, index, callback); // Fallback to Nominatim
+            }
+        });
+    }
+
+            // Create array of LatLng points for polyline
+            let latlngs = locations.map(loc => [loc.latitude, loc.longitude]);
+
+            // Draw polyline connecting all locations
+            let polyline = L.polyline(latlngs, {
+                color: '#667eea',
+                weight: 4,
+                opacity: 0.8
+            }).addTo(map);
+
+            // Add markers for each location
+            let bounds = L.latLngBounds(latlngs);
+            
+            locations.forEach((loc, index) => {
+                let isFirst = index === 0;
+                let position = [loc.latitude, loc.longitude];
+
+                // Create custom marker icon
+                let markerIcon = L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background-color: ' + (isFirst ? '#43e97b' : '#667eea') + 
+                          '; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; ' +
+                          'box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; ' +
+                          'justify-content: center; color: white; font-weight: bold; font-size: 12px;">' +
+                          (index + 1) + '</div>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                let marker = L.marker(position, { icon: markerIcon }).addTo(map);
+
+                // Get address for this location using OpenStreetMap Nominatim (FREE)
+                getAddress(loc.latitude, loc.longitude, index, function(address) {
+                    // Create popup with address
+                    let popupContent = '<div style="padding: 10px; max-width: 300px;">' +
+                            '<strong>' + workerName + '</strong><br>' +
+                            '<strong>Location ' + (index + 1) + '</strong><br><br>' +
+                            '<strong>📍 Address:</strong><br>' + address + '<br><br>' +
+                            '<strong>🕐 Time:</strong> ' + loc.timestamp + '<br>' +
+                            '<strong>📌 Coordinates:</strong><br>' +
+                            'Lat: ' + loc.latitude.toFixed(6) + '<br>' +
+                            'Lng: ' + loc.longitude.toFixed(6) +
+                            '</div>';
+                    
+                    marker.bindPopup(popupContent);
+                });
+            });
+
+            // Fit map to show all markers
+            map.fitBounds(bounds, { padding: [20, 20] });
+            
+            // Load addresses for table
+            loadAddressesForTable(locations);
+        } else {
+            // Initialize empty map
+            let map = L.map('map').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Show message
+            L.popup()
+                .setLatLng([0, 0])
+                .setContent('<div style="text-align: center; padding: 20px;">' +
+                           '<p style="font-size: 18px; color: #999;">📍 No location data available</p>' +
+                           '<p style="font-size: 14px;">The worker\'s GPS tracking will appear here once they start their shift.</p>' +
+                           '</div>')
+                .openOn(map);
+        }
+    });
+    
+    function getAddress(lat, lng, index, callback) {
+        let cacheKey = lat.toFixed(6) + ',' + lng.toFixed(6);
+        if (addressCache[cacheKey]) {
+            callback(addressCache[cacheKey]);
+            return;
+        }
+        // Use OpenStreetMap Nominatim (FREE, no API key)
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    let address = data.display_name;
+                    addressCache[cacheKey] = address;
+                    callback(address);
+                } else {
+                    let fallbackAddress = 'Coordinates: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
+                    addressCache[cacheKey] = fallbackAddress;
+                    callback('Address not available');
+                }
+            })
+            .catch(err => {
+                let fallbackAddress = 'Coordinates: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
+                addressCache[cacheKey] = fallbackAddress;
+                callback('Address not available');
+            });
+    }
+    
+    function loadAddressesForTable(locations) {
+        let addressCells = document.querySelectorAll('.address-cell');
+        addressCells.forEach(function(cell, index) {
+            if (index < locations.length) {
+                let lat = parseFloat(cell.getAttribute('data-lat'));
+                let lng = parseFloat(cell.getAttribute('data-lng'));
+                getAddress(lat, lng, index, function(address) {
+                    cell.innerHTML = '<span style="color: #2c3e50; font-weight: 500;">' + address + '</span>';
+                });
+            }
+        });
+    }
+    
+    // Initialize map on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!useGoogleMaps) {
+            setTimeout(initLeafletMapAdmin, 100);
+        }
+        // Fallback timeout
+        setTimeout(function() {
+            if (!mapInitialized) {
+                console.log('Map not initialized, using Leaflet fallback');
+                initLeafletMapAdmin();
+            }
+        }, 5000);
+    });
+    /*]]>*/
+</script>
+
+</body>
+</html>
