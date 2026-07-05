@@ -48,10 +48,17 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
                 // All other /api/** — must be logged in
                 .requestMatchers("/api/**").authenticated()
-                // Vue build output static assets — always public
+                // Vue build output static assets & public SPA routes
+                .requestMatchers("/", "/index.html", "/login", "/register").permitAll()
                 .requestMatchers("/assets/**", "/*.js", "/*.css", "/*.ico", "/*.svg", "/*.png", "/vite.svg").permitAll()
+                
+                // Role-based access control for SPA page routes
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/worker/**").hasRole("WORKER")
+                .requestMatchers("/choose-role").authenticated()
+
                 // Old Thymeleaf routes — kept working for backward compatibility
-                .requestMatchers("/login", "/register", "/css/**").permitAll()
+                .requestMatchers("/css/**").permitAll()
                 .anyRequest().authenticated()
             )
 

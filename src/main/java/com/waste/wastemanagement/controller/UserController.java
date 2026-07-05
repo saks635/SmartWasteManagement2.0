@@ -24,6 +24,7 @@ public class UserController {
         this.service = service;
     }
 
+    /* Commented out to prevent conflict with Vue SPA homepage served by SpaController
     // Show complaint form
     @GetMapping("/")
     public String home(Model model) {
@@ -36,6 +37,7 @@ public class UserController {
 
         return "complaint-form";
     }
+    */
 
     // Submit complaint
     @PostMapping("/submit")

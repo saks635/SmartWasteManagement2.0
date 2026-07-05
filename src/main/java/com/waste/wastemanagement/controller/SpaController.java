@@ -35,6 +35,8 @@ public class SpaController {
      */
     @RequestMapping(value = {
         "/",
+        "/login",
+        "/register",
         "/admin",
         "/worker",
         "/choose-role",

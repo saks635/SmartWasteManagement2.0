@@ -21,6 +21,7 @@ public class LoginController {
         this.userService = userService;
     }
 
+    /* Commented out to prevent conflict with Vue SPA routes served by SpaController
     @GetMapping("/login")
     public String login(Authentication authentication) {
         // If user already logged in (not anonymous), redirect to home
@@ -55,4 +56,5 @@ public class LoginController {
             return "redirect:/register";
         }
     }
+    */
 }

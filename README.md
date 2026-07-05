@@ -103,6 +103,40 @@ graph LR
 
 ---
 
+## 🧪 Automated Testing (Selenium E2E)
+
+This project contains integrated End-to-End (E2E) automated tests to verify the full user operational workflow across different user roles. The tests use **JUnit 5** and **Selenium WebDriver** to launch an automated Chrome browser and interact with the Vue SPA frontend.
+
+### Running the E2E Tests
+1. Make sure **Google Chrome** is installed on your local machine.
+2. Verify **MongoDB** is running locally on port `27017`.
+3. Compile and build the Vue SPA frontend files into Spring Boot's static directory:
+   ```bash
+   cd frontend
+   npm run build
+   cd ..
+   ```
+4. Run the E2E tests:
+   ```bash
+   # On Windows
+   .\mvnw.cmd test -Dtest=UserWorkflowE2ETest
+
+   # On Mac/Linux
+   ./mvnw test -Dtest=UserWorkflowE2ETest
+   ```
+
+### E2E Test Suite Features
+- **Registration & Login Flow:** Verifies new citizen registration, automatic redirection to the login view, credentials validation, and rendering of the dashboard.
+- **Role-Based Access Control (RBAC) Validation:** Asserts that sanitation workers cannot access `/admin` resources (returning a `403 Forbidden` response), while admins can access it successfully.
+- **Full Operational Lifecycle Simulation:** 
+  1. A citizen logs in and files a waste complaint using their **browser geolocation**.
+  2. A worker logs in and activates **real-time GPS location tracking**.
+  3. An admin logs in, locates the complaint in the pending table, and assigns it to the active worker.
+  4. The worker logs in, locates the task, and marks it as **Cleaned**.
+  5. The admin logs in to confirm the status is successfully updated to `CLEANED`.
+
+---
+
 ## 🌐 Google OAuth2 Setup
 
 To enable "Continue with Google" functionality:

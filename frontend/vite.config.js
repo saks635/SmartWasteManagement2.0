@@ -7,6 +7,10 @@ export default defineConfig({
     vue(),
     tailwindcss(), // Tailwind CSS v4 — no config file needed!
   ],
+  build: {
+    outDir: '../src/main/resources/static',
+    emptyOutDir: true
+  },
   server: {
     port: 5173,
     // Proxy: All these requests from Vue are forwarded to Spring Boot on port 8080
