@@ -61,7 +61,7 @@ public class SecurityConfig {
                 // All other /api/** — must be logged in
                 .requestMatchers("/api/**").authenticated()
                 // Vue build output static assets & public SPA routes
-                .requestMatchers("/", "/index.html", "/login", "/register").permitAll()
+                .requestMatchers("/", "/index.html", "/login", "/register", "/error").permitAll()
                 .requestMatchers("/assets/**", "/*.js", "/*.css", "/*.ico", "/*.svg", "/*.png", "/vite.svg").permitAll()
                 
                 // Role-based access control for SPA page routes
