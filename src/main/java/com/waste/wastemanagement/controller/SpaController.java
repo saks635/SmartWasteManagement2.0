@@ -38,9 +38,9 @@ public class SpaController {
         "/login",
         "/register",
         "/admin",
+        "/admin/**",
         "/worker",
-        "/choose-role",
-        "/admin/worker/{username}"
+        "/choose-role"
     })
     public String spa() {
         // Serve the Vue entry point — Spring Boot finds this in static/index.html

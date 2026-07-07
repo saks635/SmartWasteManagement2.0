@@ -167,8 +167,8 @@ public class SecurityConfig {
     @Bean
     public CookieSerializer cookieSerializer() {
         DefaultCookieSerializer serializer = new DefaultCookieSerializer();
-        serializer.setSameSite("None"); // Crucial for cross-site cookie transfers
-        serializer.setUseSecureCookie(true); // Must be Secure when SameSite=None
+        serializer.setSameSite("Lax"); // Correct for same-origin monolith (Vue embedded in JAR)
+        serializer.setUseSecureCookie(false); // Allow cookies over HTTP; set true only when running behind HTTPS
         return serializer;
     }
 
