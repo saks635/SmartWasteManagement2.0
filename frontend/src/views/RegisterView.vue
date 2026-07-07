@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { API_BASE } from '../config.js'
 
 const router   = useRouter()
 const username = ref('')
@@ -16,7 +17,7 @@ async function register() {
   loading.value = true
 
   // Send registration data as JSON to Spring Boot
-  const res = await fetch('/api/auth/register', {
+  const res = await fetch(API_BASE + '/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

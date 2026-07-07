@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchUser, user } from '../composables/useUser.js'
+import { API_BASE } from '../config.js'
 
 const router  = useRouter()
 const selected = ref('USER')  // Which role card is selected
@@ -13,7 +14,7 @@ async function submitRole() {
   error.value   = ''
 
   // Send chosen role to Spring Boot
-  const res = await fetch('/api/auth/choose-role', {
+  const res = await fetch(API_BASE + '/api/auth/choose-role', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: selected.value }),

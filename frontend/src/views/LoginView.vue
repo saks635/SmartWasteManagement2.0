@@ -2,12 +2,15 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchUser } from '../composables/useUser.js'
+import { API_BASE } from '../config.js'
 
 const router   = useRouter()
 const username = ref('')   // Bound to the username input
 const password = ref('')   // Bound to the password input
 const error    = ref('')   // Shows error message if login fails
 const loading  = ref(false)
+
+const googleLoginUrl = `${API_BASE || 'http://localhost:8080'}/oauth2/authorization/google`
 
 async function login() {
   error.value   = ''
@@ -16,7 +19,7 @@ async function login() {
   // Send username + password to Spring Boot as form data (required by Spring Security)
   const body = new URLSearchParams({ username: username.value, password: password.value })
 
-  const res = await fetch('/api/auth/login', {
+  const res = await fetch(API_BASE + '/api/auth/login', {
     method: 'POST',
     body,
     credentials: 'include',  // include session cookie
@@ -25,15 +28,21 @@ async function login() {
   loading.value = false
 
   if (res.ok) {
-    const data = await res.json()
-    // Refresh user state, then redirect to the right dashboard
+    // Refresh user state
     await fetchUser()
-    if (data.role === 'ADMIN')   router.push('/admin')
-    else if (data.role === 'WORKER') router.push('/worker')
+    // Read from user state (exported from useUser.js)
+    const { user } = await import('../composables/useUser.js')
+    if (user.role === 'ADMIN')   router.push('/admin')
+    else if (user.role === 'WORKER') router.push('/worker')
+    else if (user.role === 'PENDING') router.push('/choose-role')
     else router.push('/')
   } else {
-    const data = await res.json()
-    error.value = data.error || 'Login failed'
+    try {
+      const data = await res.json()
+      error.value = data.error || 'Login failed'
+    } catch (e) {
+      error.value = 'Invalid username or password'
+    }
   }
 }
 </script>
@@ -89,7 +98,7 @@ async function login() {
 
       <!-- Google OAuth2 button — goes DIRECTLY to Spring Boot (not through Vite proxy)
            This is needed because OAuth2 session handling doesn't work through a proxy -->
-      <a href="http://localhost:8080/oauth2/authorization/google"
+      <a :href="googleLoginUrl"
         class="flex items-center justify-center gap-3 w-full border border-[#1d3461] text-[#ccd6f6] rounded-xl py-3 hover:bg-[#1d3461] transition-colors">
         <svg width="20" height="20" viewBox="0 0 24 24">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

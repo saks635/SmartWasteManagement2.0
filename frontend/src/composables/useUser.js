@@ -1,6 +1,7 @@
 // useUser.js — Simple shared state for the logged-in user
 // Think of this as a tiny "global variable" that all components can read
 import { reactive } from 'vue'
+import { API_BASE } from '../config.js'
 
 // This object is shared across all components
 // When it changes, any component using it automatically updates
@@ -13,7 +14,7 @@ export const user = reactive({
 // Called on app startup and after login
 export async function fetchUser() {
   try {
-    const res = await fetch('/api/auth/me', { credentials: 'include' })
+    const res = await fetch(API_BASE + '/api/auth/me', { credentials: 'include' })
     if (res.ok) {
       const data = await res.json()
       user.email = data.email

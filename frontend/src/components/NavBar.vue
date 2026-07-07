@@ -1,11 +1,12 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { user, clearUser } from '../composables/useUser.js'
+import { API_BASE } from '../config.js'
 
 const router = useRouter()
 
 async function logout() {
-  await fetch('/logout', { method: 'POST', credentials: 'include' })
+  await fetch(API_BASE + '/logout', { method: 'POST', credentials: 'include' })
   clearUser()
   router.push('/login')
 }

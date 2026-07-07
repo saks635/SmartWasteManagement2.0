@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waste.wastemanagement.service.CustomOAuth2UserService;
 import com.waste.wastemanagement.service.CustomUserDetailsService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -12,12 +13,21 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.session.web.http.DefaultCookieSerializer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
     private final CustomUserDetailsService userDetailsService;
     private final CustomOAuth2UserService oauth2UserService;
@@ -34,6 +44,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // Enable CORS support
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             // ── URL Access Rules ──────────────────────────────────────────
             .authorizeHttpRequests(auth -> auth
                 // Admin API — only ADMIN role
@@ -98,10 +110,10 @@ public class SecurityConfig {
                             .map(a -> a.getAuthority().replace("ROLE_", ""))
                             .orElse("USER");
                     String redirectUrl = switch (role) {
-                        case "ADMIN"   -> "http://localhost:5173/admin";
-                        case "WORKER"  -> "http://localhost:5173/worker";
-                        case "PENDING" -> "http://localhost:5173/choose-role";
-                        default        -> "http://localhost:5173/";
+                        case "ADMIN"   -> frontendUrl + "/admin";
+                        case "WORKER"  -> frontendUrl + "/worker";
+                        case "PENDING" -> frontendUrl + "/choose-role";
+                        default        -> frontendUrl + "/";
                     };
                     response.sendRedirect(redirectUrl);
                 })
@@ -135,6 +147,29 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable()); // Disabled — Vue uses session cookies, not CSRF tokens
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        // Allow the configured frontend origin, including credentials (cookies)
+        configuration.setAllowedOrigins(Arrays.asList(frontendUrl));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "Cookie"));
+        configuration.setExposedHeaders(Arrays.asList("Set-Cookie"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    @Bean
+    public CookieSerializer cookieSerializer() {
+        DefaultCookieSerializer serializer = new DefaultCookieSerializer();
+        serializer.setSameSite("None"); // Crucial for cross-site cookie transfers
+        serializer.setUseSecureCookie(true); // Must be Secure when SameSite=None
+        return serializer;
     }
 
     @Bean

@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { user } from '../composables/useUser.js'
 import NavBar from '../components/NavBar.vue'
+import { API_BASE } from '../config.js'
 
 const complaints = ref([])
 const loading    = ref(true)
@@ -11,7 +12,7 @@ let gpsInterval  = null
 
 // Load complaints assigned to this worker
 onMounted(async () => {
-  const res = await fetch('/api/worker/complaints', { credentials: 'include' })
+  const res = await fetch(API_BASE + '/api/worker/complaints', { credentials: 'include' })
   if (res.ok) complaints.value = await res.json()
   loading.value = false
 })
@@ -38,7 +39,7 @@ function stopGPS() {
 
 function sendLocation() {
   navigator.geolocation.getCurrentPosition(async (pos) => {
-    await fetch('/api/worker/location', {
+    await fetch(API_BASE + '/api/worker/location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -49,14 +50,14 @@ function sendLocation() {
 
 // Mark a complaint as cleaned
 async function markCleaned(id) {
-  await fetch('/api/worker/clean', {
+  await fetch(API_BASE + '/api/worker/clean', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ complaintId: id }),
     credentials: 'include',
   })
   // Refresh list
-  const res = await fetch('/api/worker/complaints', { credentials: 'include' })
+  const res = await fetch(API_BASE + '/api/worker/complaints', { credentials: 'include' })
   if (res.ok) complaints.value = await res.json()
 }
 

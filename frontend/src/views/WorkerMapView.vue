@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NavBar from '../components/NavBar.vue'
+import { API_BASE } from '../config.js'
 
 const route     = useRoute()
 const router    = useRouter()
@@ -11,7 +12,7 @@ const loading   = ref(true)
 
 onMounted(async () => {
   // Fetch this worker's last 10 GPS locations
-  const res = await fetch(`/api/admin/worker/${username}/locations`, { credentials: 'include' })
+  const res = await fetch(API_BASE + `/api/admin/worker/${username}/locations`, { credentials: 'include' })
   if (res.ok) locations.value = await res.json()
   loading.value = false
 

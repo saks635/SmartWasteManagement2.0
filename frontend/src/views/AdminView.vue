@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import NavBar from '../components/NavBar.vue'
+import { API_BASE } from '../config.js'
 
 const router     = useRouter()
 const complaints = ref([])   // All complaints list
@@ -11,8 +12,8 @@ const loading    = ref(true)
 // Load all complaints and workers when page opens
 onMounted(async () => {
   const [cRes, wRes] = await Promise.all([
-    fetch('/api/admin/complaints', { credentials: 'include' }),
-    fetch('/api/admin/workers',    { credentials: 'include' }),
+    fetch(API_BASE + '/api/admin/complaints', { credentials: 'include' }),
+    fetch(API_BASE + '/api/admin/workers',    { credentials: 'include' }),
   ])
   if (cRes.ok) complaints.value = await cRes.json()
   if (wRes.ok) workers.value    = await wRes.json()
@@ -22,14 +23,14 @@ onMounted(async () => {
 // Assign a worker to a complaint
 async function assign(complaintId, workerName) {
   if (!workerName) return
-  await fetch('/api/admin/assign', {
+  await fetch(API_BASE + '/api/admin/assign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ complaintId, workerName }),
     credentials: 'include',
   })
   // Refresh complaints list
-  const res = await fetch('/api/admin/complaints', { credentials: 'include' })
+  const res = await fetch(API_BASE + '/api/admin/complaints', { credentials: 'include' })
   if (res.ok) complaints.value = await res.json()
 }
 

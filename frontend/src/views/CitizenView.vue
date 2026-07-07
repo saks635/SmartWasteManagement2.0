@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { user } from '../composables/useUser.js'
 import NavBar from '../components/NavBar.vue'
+import { API_BASE } from '../config.js'
 
 // Form data
 const name     = ref(user.email || '')
@@ -22,7 +23,7 @@ async function submit() {
   error.value  = ''
   loading.value = true
 
-  const res = await fetch('/api/complaints', {
+  const res = await fetch(API_BASE + '/api/complaints', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
