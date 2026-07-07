@@ -19,9 +19,13 @@ public class WastemanagementApplication {
     @Bean
     CommandLineRunner initUsers(UserRepository userRepository, PasswordEncoder encoder) {
         return args -> {
-            if (userRepository.findAll().isEmpty()) {
+            if (userRepository.findByUsername("admin") == null) {
                 userRepository.save(new AppUser(null, "admin", encoder.encode("admin123"), "ADMIN"));
+            }
+            if (userRepository.findByUsername("worker1") == null) {
                 userRepository.save(new AppUser(null, "worker1", encoder.encode("worker123"), "WORKER"));
+            }
+            if (userRepository.findByUsername("user1") == null) {
                 userRepository.save(new AppUser(null, "user1", encoder.encode("user123"), "USER"));
             }
         };
