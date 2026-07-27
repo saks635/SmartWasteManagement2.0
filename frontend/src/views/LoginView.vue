@@ -10,7 +10,7 @@ const password = ref('')   // Bound to the password input
 const error    = ref('')   // Shows error message if login fails
 const loading  = ref(false)
 
-const googleLoginUrl = `${API_BASE || 'http://localhost:8080'}/oauth2/authorization/google`
+const googleLoginUrl = `${API_BASE || ''}/oauth2/authorization/google`
 
 async function login() {
   error.value   = ''
