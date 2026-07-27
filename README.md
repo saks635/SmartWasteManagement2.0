@@ -41,22 +41,106 @@ This project features a decoupled architecture with a **Vue 3** frontend and a *
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Detailed System Architecture
 
-The system is built on a modern decoupled architecture:
+The application follows an enterprise multi-tier, decoupled cloud architecture:
 
 ```mermaid
-graph LR
-    A[Vue 3 Frontend] <-->|REST API JSON| B(Spring Boot Backend)
-    B <--> C[(MongoDB)]
-    B <--> D[(Redis)]
-    A <-->|OAuth2 Login| E(Google Cloud)
-    B <--> E
+graph TD
+    subgraph Client_Layer["📱 Client Layer (Browser / SPA)"]
+        direction TB
+        VUE["Vue 3 SPA (Vite + Tailwind v4)"]
+        UI_AUTH["🔐 Auth Views (Login / Register / Choose Role)"]
+        UI_CITIZEN["📌 Citizen Portal (Pin Complaints on Map)"]
+        UI_WORKER["🚜 Worker Portal (GPS Broadcast & Task Clean)"]
+        UI_ADMIN["🎛️ Admin Dashboard (Worker Polyline Tracking & Assignment)"]
+        LEAFLET["🗺️ Leaflet.js / OpenStreetMap Engine"]
+        GEO["📡 Browser Geolocation API (Every 30s)"]
+    end
+
+    subgraph CDN_Layer["⚡ Edge / Host Layer"]
+        VERCEL["Vercel CDN (Frontend SPA) / Render Docker Host"]
+    end
+
+    subgraph Gateway_Layer["🛡️ Security & Gateway Layer (Spring Security 6)"]
+        CORS["CORS Policy & Cookie Serializer (SameSite=None/Lax)"]
+        AUTH_FILTER["Form Login & Session Security Filter Chain"]
+        OAUTH_CLIENT["Google OAuth2 Authorization Code Flow"]
+    end
+
+    subgraph Service_Layer["⚙️ Application Logic Layer (Spring Boot 3.5 / Java 17)"]
+        CTRL_AUTH["AuthController (/api/auth/*)"]
+        CTRL_COMP["ComplaintController (/api/complaints/*)"]
+        CTRL_ADMIN["AdminController (/api/admin/*)"]
+        CTRL_WORKER["WorkerController (/api/worker/*)"]
+        SVC_COMP["Complaint Management Service"]
+        SVC_WORKER["Worker GPS & Polyline Tracking Service"]
+    end
+
+    subgraph Cache_Layer["⚡ Caching & Session Store (Upstash Redis)"]
+        REDIS_SESS["Distributed HTTP Sessions (SPRING_SESSION)"]
+        REDIS_CACHE["Worker Location Cache (cache:worker_locations)"]
+    end
+
+    subgraph DB_Layer["🍃 Persistence Layer (MongoDB Atlas)"]
+        MONGO_USER["Users Collection (Credentials & Roles)"]
+        MONGO_COMP["Complaints Collection (Issues & Status)"]
+        MONGO_LOC["Worker Locations Collection (GPS Logs)"]
+    end
+
+    subgraph External_Layer["🌍 External Services"]
+        GOOGLE["Google Cloud Console (OAuth2 Provider)"]
+        OSM["OpenStreetMap Tile Servers"]
+    end
+
+    %% Flow Connections
+    VUE -->|Serves Static Web Assets| VERCEL
+    Client_Layer -->|REST API Requests JSON with Cookies| CORS
+    LEAFLET -->|Fetch Map Tiles| OSM
+    GEO -->|Broadcast Lat/Lng| UI_WORKER
+
+    CORS --> AUTH_FILTER
+    AUTH_FILTER -->|SSO Token Request| OAUTH_CLIENT
+    OAUTH_CLIENT <-->|OAuth2 Handshake| GOOGLE
+
+    AUTH_FILTER --> CTRL_AUTH
+    AUTH_FILTER --> CTRL_COMP
+    AUTH_FILTER --> CTRL_ADMIN
+    AUTH_FILTER --> CTRL_WORKER
+
+    CTRL_COMP --> SVC_COMP
+    CTRL_ADMIN --> SVC_COMP
+    CTRL_WORKER --> SVC_WORKER
+
+    SVC_COMP <--> MONGO_COMP
+    SVC_WORKER <--> REDIS_CACHE
+    SVC_WORKER <--> MONGO_LOC
+    CTRL_AUTH <--> MONGO_USER
+    AUTH_FILTER <--> REDIS_SESS
 ```
 
-- **Frontend:** Runs independently (e.g., via Vite dev server on port `5173`). It acts as a Single Page Application (SPA).
-- **Backend:** Exposes RESTful endpoints under `/api/**`. Runs on port `8080`.
-- **Proxy:** During development, Vite proxies all API and OAuth requests from the frontend to the backend to maintain a single origin for session cookies.
+### Component Layer Breakdown
+
+1. **Client Layer (Vue 3 Single Page Application)**
+   - Built with Vue 3 (Composition API) and Tailwind CSS v4.
+   - Embeds **Leaflet.js** for rendering interactive map pins and tracking worker location polylines.
+   - Captures browser HTML5 Geolocation every 30 seconds for active workers.
+
+2. **Security & Gateway Layer (Spring Security 6)**
+   - Intercepts requests to enforce Role-Based Access Control (`ROLE_ADMIN`, `ROLE_WORKER`, `ROLE_USER`).
+   - Handles Google OAuth2 Authorization Code flow and form-based login authentication.
+   - Controls CORS headers and configures session cookies with dynamic `SameSite` policies.
+
+3. **Application Logic Layer (Spring Boot 3.5)**
+   - Exposes RESTful endpoints under `/api/**`.
+   - Manages business workflows: citizen complaint submission, admin task assignment, worker GPS logging, and resolution confirmation.
+
+4. **Caching & Distributed Sessions (Upstash Redis)**
+   - Stores user HTTP session state (`SPRING_SESSION`) externally to allow stateless horizontally scaled backend instances.
+   - Caches active worker GPS positions to minimize database write operations during continuous location broadcasts.
+
+5. **Persistence Layer (MongoDB Atlas)**
+   - Houses persistent document collections for `users`, `complaints`, and historical `worker_locations`.
 
 ---
 
