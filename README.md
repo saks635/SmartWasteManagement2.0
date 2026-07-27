@@ -1,5 +1,9 @@
 # ♻️ Smart Waste Management System
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Render-brightgreen?style=for-the-badge&logo=render)](https://smart-waste-management-api.onrender.com)
+
+🌐 **Live Deployed App:** [https://smart-waste-management-api.onrender.com](https://smart-waste-management-api.onrender.com)
+
 A modern, full-stack application designed to streamline city waste management. It allows citizens to report waste issues, admins to manage and assign complaints, and sanitation workers to receive tasks and track their GPS location in real-time.
 
 This project features a decoupled architecture with a **Vue 3** frontend and a **Spring Boot** backend, utilizing **MongoDB** for persistence, **Redis** for caching and sessions, and **Google OAuth2** for seamless authentication.
